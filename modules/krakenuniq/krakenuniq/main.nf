@@ -12,6 +12,7 @@ process KRAKENUNIQ_KRAKENUNIQ {
     path  db
     val save_output_fastqs
     val report_file
+    val save_output
 
     output:
     tuple val(meta), path('*.classified{.,_}*')     , optional:true, emit: classified_reads_fastq
@@ -33,7 +34,8 @@ process KRAKENUNIQ_KRAKENUNIQ {
     def unclassified = meta.single_end ? "${prefix}.unclassified.fastq" : "${prefix}.unclassified#.fastq"
     def classified_option = save_output_fastqs ? "--classified-out ${classified}" : ""
     def unclassified_option = save_output_fastqs ? "--unclassified-out ${unclassified}" : ""
-    def readclassification_option = save_reads_assignment ? "--output ${prefix}.krakenuniq.classifiedreads.txt" : ""
+    def output_option = save_output ? "--output ${prefix}.krakenuniq.classified.txt" : ""
+    def report = report_file ? "--report-file ${prefix}.krakenunniq.report.txt" : ""
 //    def compress_reads_command = save_output_fastqs ? "pigz -p $task.cpus *.fastq" : ""
 
 // Currently not including the compress_reads_option with pigz. Include later.
@@ -48,11 +50,11 @@ process KRAKENUNIQ_KRAKENUNIQ {
         krakenuniq \\
             --db $db \\
             --threads $task.cpus \\
-            --report-file ${prefix}.krakenunniq.report.txt \\
-            --output
+            $report \\
+            $output_option \\
             $unclassified_option \\
             $classified_option \\
-            $readclassification_option \\
+            $output_option \\
             $paired \\
             $args \\
             $fastqs;
@@ -60,7 +62,7 @@ process KRAKENUNIQ_KRAKENUNIQ {
 
     cat <<-END_VERSIONS > versions.yml
     "${task.process}":
-        krakenuniq: \$(echo \$(krakenuniq --version 2>&1) | sed 's/^.*Krakenuniq version //; s/ .*\$//')
+        krakenuniq: \$(echo \$(krakenuniq --version 2>&1) | sed 's/^.*KrakenUniq version //; s/ .*\$//')
     END_VERSIONS
     """
 }
