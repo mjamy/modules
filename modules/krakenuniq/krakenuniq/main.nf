@@ -8,47 +8,59 @@ process KRAKENUNIQ_KRAKENUNIQ {
         'quay.io/biocontainers/krakenuniq:1.0.0--pl5321h19e8d03_0' }"
 
     input:
-    // TODO nf-core: Where applicable all sample-specific information e.g. "id", "single_end", "read_group"
-    //               MUST be provided as an input via a Groovy Map called "meta".
-    //               This information may not be required in some instances e.g. indexing reference genome files:
-    //               https://github.com/nf-core/modules/blob/master/modules/bwa/index/main.nf
-    // TODO nf-core: Where applicable please provide/convert compressed files as input/output
-    //               e.g. "*.fastq.gz" and NOT "*.fastq", "*.bam" and NOT "*.sam" etc.
-    tuple val(meta), path(bam)
+    tuple val(meta), path(fastqs)
+    path  db
+    val save_output_fastqs
+    val report_file
 
     output:
-    // TODO nf-core: Named file extensions MUST be emitted for ALL output channels
-    tuple val(meta), path("*.bam"), emit: bam
-    // TODO nf-core: List additional required output channels/values here
-    path "versions.yml"           , emit: versions
+    tuple val(meta), path('*.classified{.,_}*')     , optional:true, emit: classified_reads_fastq
+    tuple val(meta), path('*.unclassified{.,_}*')   , optional:true, emit: unclassified_reads_fastq
+    tuple val(meta), path('*classifiedreads.txt')   , optional:true, emit: classified_reads_assignment
+    tuple val(meta), path('*report.txt')                           , emit: report
+
+    path "versions.yml"                                            , emit: versions
 
     when:
     task.ext.when == null || task.ext.when
 
+
     script:
     def args = task.ext.args ?: ''
-    def prefix = task.ext.prefix ?: "${meta.id}"
-    // TODO nf-core: Where possible, a command MUST be provided to obtain the version number of the software e.g. 1.10
-    //               If the software is unable to output a version number on the command-line then it can be manually specified
-    //               e.g. https://github.com/nf-core/modules/blob/master/modules/homer/annotatepeaks/main.nf
-    //               Each software used MUST provide the software name and version number in the YAML version file (versions.yml)
-    // TODO nf-core: It MUST be possible to pass additional parameters to the tool as a command-line string via the "task.ext.args" directive
-    // TODO nf-core: If the tool supports multi-threading then you MUST provide the appropriate parameter
-    //               using the Nextflow "task" variable e.g. "--threads $task.cpus"
-    // TODO nf-core: Please replace the example samtools command below with your module's command
-    // TODO nf-core: Please indent the command appropriately (4 spaces!!) to help with readability ;)
+    def prefix = task.ext.prefix ?: "${meta.id}".  // INCLUDE???
+    def paired       = meta.single_end ? "" : "--paired"
+    def classified   = meta.single_end ? "${prefix}.classified.fastq"   : "${prefix}.classified#.fastq"
+    def unclassified = meta.single_end ? "${prefix}.unclassified.fastq" : "${prefix}.unclassified#.fastq"
+    def classified_option = save_output_fastqs ? "--classified-out ${classified}" : ""
+    def unclassified_option = save_output_fastqs ? "--unclassified-out ${unclassified}" : ""
+    def readclassification_option = save_reads_assignment ? "--output ${prefix}.krakenuniq.classifiedreads.txt" : ""
+//    def compress_reads_command = save_output_fastqs ? "pigz -p $task.cpus *.fastq" : ""
+
+// Currently not including the compress_reads_option with pigz. Include later.
+// How to get prefix (from meta) when having a list of fastqs?
     """
-    samtools \\
-        sort \\
-        $args \\
-        -@ $task.cpus \\
-        -o ${prefix}.bam \\
-        -T $prefix \\
-        $bam
+    krakenuniq \\
+        --db $db \\
+        --preload \\
+        --threads $task.cpus;
+
+    for fastqs in ${fastqs.join(' ')}; do \\
+        krakenuniq \\
+            --db $db \\
+            --threads $task.cpus \\
+            --report-file ${prefix}.krakenunniq.report.txt \\
+            --output
+            $unclassified_option \\
+            $classified_option \\
+            $readclassification_option \\
+            $paired \\
+            $args \\
+            $fastqs;
+    done
 
     cat <<-END_VERSIONS > versions.yml
     "${task.process}":
-        krakenuniq: \$(echo \$(samtools --version 2>&1) | sed 's/^.*samtools //; s/Using.*\$//' ))
+        krakenuniq: \$(echo \$(krakenuniq --version 2>&1) | sed 's/^.*Krakenuniq version //; s/ .*\$//')
     END_VERSIONS
     """
 }
